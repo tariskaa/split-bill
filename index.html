@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Simple Split Bill</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    input, select { margin: 5px; }
+    table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 5px; }
+  </style>
+</head>
+<body>
+  <h2>💸 Simple Split Bill</h2>
+  <label>Description: <input id="desc" /></label>
+  <label>Amount: <input id="amount" type="number" /></label>
+  <label>Paid By:
+    <select id="paidBy">
+      <option>Alice</option>
+      <option>Bob</option>
+      <option>Carol</option>
+    </select>
+  </label>
+  <label>Split Between:
+    <select id="shared" multiple size="3">
+      <option>Alice</option>
+      <option>Bob</option>
+      <option>Carol</option>
+    </select>
+  </label>
+  <button onclick="addExpense()">Add Expense</button>
+
+  <h3>🧾 Expenses</h3>
+  <table id="expenseTable">
+    <tr><th>Description</th><th>Amount</th><th>Paid By</th><th>Shared</th></tr>
+  </table>
+
+  <h3>📊 Balances</h3>
+  <pre id="result"></pre>
+
+  <script>
+    let expenses = [];
+
+    function addExpense() {
+      const desc = document.getElementById('desc').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const paidBy = document.getElementById('paidBy').value;
+      const sharedOpts = Array.from(document.getElementById('shared').selectedOptions);
+      const sharedWith = sharedOpts.map(o => o.value);
+
+      if (!desc || !amount || sharedWith.length === 0) {
+        alert("Please fill all fields.");
+        return;
+      }
+
+      expenses.push({ desc, amount, paidBy, sharedWith });
+      updateTable();
+      updateBalances();
+    }
+
+    function updateTable() {
+      const table = document.getElementById('expenseTable');
+      table.innerHTML = `<tr><th>Description</th><th>Amount</th><th>Paid By</th><th>Shared</th></tr>`;
+      expenses.forEach(e => {
+        const row = `<tr><td>${e.desc}</td><td>${e.amount}</td><td>${e.paidBy}</td><td>${e.sharedWith.join(', ')}</td></tr>`;
+        table.innerHTML += row;
+      });
+    }
+
+    function updateBalances() {
+      const balance = {};
+      ['Alice', 'Bob', 'Carol'].forEach(name => balance[name] = 0);
+
+      expenses.forEach(e => {
+        const share = e.amount / e.sharedWith.length;
+        e.sharedWith.forEach(person => {
+          balance[person] -= share;
+        });
+        balance[e.paidBy] += e.amount;
+      });
+
+      let output = '';
+      for (let name in balance) {
+        output += `${name}: ${balance[name].toFixed(2)}\n`;
+      }
+      document.getElementById('result').textContent = output;
+    }
+  </script>
+</body>
+</html>
