@@ -1,169 +1,196 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Split Bill - Tariska & Friends</title>
+  <meta charset="UTF-8" />
+  <title>Split Bill with Friends</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    input, select, button { margin: 5px; padding: 5px; }
-    table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 5px; }
-    th { background-color: #f0f0f0; }
-    td button { margin: 2px; }
+    body { font-family: sans-serif; padding: 20px; }
+    input, select { margin: 5px; }
+    .transaction { margin: 10px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
   </style>
 </head>
 <body>
-  <h2>💸 Split Bill - Tariska & Friends</h2>
+  <h2>Split Bill - Indonesia</h2>
 
-  <label>Description: <input id="desc" /></label>
-  <label>Paid By:
-    <select id="paidBy">
-      <option>Tariska</option>
-      <option>Delano</option>
-      <option>Lika</option>
-      <option>Husin</option>
-    </select>
-  </label><br>
+  <label>Payer:</label>
+  <select id="payer">
+    <option>Tariska</option>
+    <option>Delano</option>
+    <option>Lika</option>
+    <option>Husin</option>
+  </select><br>
 
-  <h3>Who Shared and How Much?</h3>
-  <table>
-    <tr><th>Name</th><th>Amount (Rp)</th></tr>
-    <tr><td>Tariska</td><td><input type="number" id="Tariska" value="0"></td></tr>
-    <tr><td>Delano</td><td><input type="number" id="Delano" value="0"></td></tr>
-    <tr><td>Lika</td><td><input type="number" id="Lika" value="0"></td></tr>
-    <tr><td>Husin</td><td><input type="number" id="Husin" value="0"></td></tr>
-  </table><br>
+  <label>Description:</label>
+  <input type="text" id="description" placeholder="e.g. Hotel" /><br>
 
-  <button onclick="addExpense()">Add Expense</button>
+  <label>Amount (Rp):</label>
+  <input type="number" id="amount" /><br>
 
-  <h3>🧾 Expenses</h3>
-  <table id="expenseTable">
-    <tr><th>Description</th><th>Paid By</th><th>Details</th><th>Actions</th></tr>
-  </table>
+  <label>Who joined?</label><br>
+  <input type="checkbox" class="member" value="Tariska" checked> Tariska
+  <input type="checkbox" class="member" value="Delano" checked> Delano
+  <input type="checkbox" class="member" value="Lika" checked> Lika
+  <input type="checkbox" class="member" value="Husin" checked> Husin<br>
 
-  <h3>📊 Who Owes Whom</h3>
-  <pre id="result"></pre>
+  <label><input type="checkbox" id="splitEqual" checked> Split equally?</label><br>
+
+  <div id="unequalInputs" style="display:none;">
+    <p>Input individual amounts (Rp):</p>
+    <div id="individualInputs"></div>
+  </div>
+
+  <button onclick="addTransaction()">Add</button>
+
+  <h3>Transactions</h3>
+  <div id="transactions"></div>
+
+  <h3>Summary</h3>
+  <div id="summary"></div>
 
   <script>
-    const names = ["Tariska", "Delano", "Lika", "Husin"];
-    let expenses = [];
+    const members = ["Tariska", "Delano", "Lika", "Husin"];
+    const transactions = [];
 
-    function getInputData() {
-      const desc = document.getElementById("desc").value;
-      const paidBy = document.getElementById("paidBy").value;
-      const shares = {};
-      let total = 0;
+    document.getElementById("splitEqual").addEventListener("change", function () {
+      const show = !this.checked;
+      document.getElementById("unequalInputs").style.display = show ? "block" : "none";
+      if (show) renderUnequalInputs();
+    });
 
-      names.forEach(name => {
-        const amt = parseFloat(document.getElementById(name).value) || 0;
-        shares[name] = amt;
-        total += amt;
+    function renderUnequalInputs() {
+      const container = document.getElementById("individualInputs");
+      container.innerHTML = "";
+      document.querySelectorAll(".member:checked").forEach(cb => {
+        const name = cb.value;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.placeholder = `${name}'s share`;
+        input.id = `amount-${name}`;
+        container.appendChild(document.createTextNode(name));
+        container.appendChild(input);
+        container.appendChild(document.createElement("br"));
       });
-
-      return { desc, paidBy, shares, total };
     }
 
-    function addExpense(isEdit = false, editIndex = null) {
-      const { desc, paidBy, shares, total } = getInputData();
+    function addTransaction(editIndex = null) {
+      const payer = document.getElementById("payer").value;
+      const description = document.getElementById("description").value;
+      const amount = parseFloat(document.getElementById("amount").value);
+      const splitEqually = document.getElementById("splitEqual").checked;
 
-      if (!desc || total === 0) {
-        alert("Please enter a description and non-zero shared amounts.");
+      const selected = [...document.querySelectorAll(".member:checked")].map(cb => cb.value);
+
+      if (selected.length === 0 || isNaN(amount) || amount <= 0) {
+        alert("Please fill in valid data.");
         return;
       }
 
-      if (isEdit) {
-        expenses[editIndex] = { desc, paidBy, shares };
+      let shares = {};
+      if (splitEqually) {
+        const share = Math.round((amount / selected.length));
+        selected.forEach(name => shares[name] = share);
       } else {
-        expenses.push({ desc, paidBy, shares });
+        let totalInput = 0;
+        selected.forEach(name => {
+          const val = parseFloat(document.getElementById(`amount-${name}`).value || 0);
+          shares[name] = val;
+          totalInput += val;
+        });
+        if (Math.abs(totalInput - amount) > 1) {
+          alert("Total of individual shares must equal the total amount.");
+          return;
+        }
       }
 
-      updateTable();
-      updateResult();
+      const data = { payer, description, amount, shares };
+
+      if (editIndex !== null) {
+        transactions[editIndex] = data;
+      } else {
+        transactions.push(data);
+      }
+
+      renderTransactions();
+      renderSummary();
       clearInputs();
     }
 
-    function deleteExpense(index) {
-      expenses.splice(index, 1);
-      updateTable();
-      updateResult();
-    }
-
-    function editExpense(index) {
-      const expense = expenses[index];
-      document.getElementById("desc").value = expense.desc;
-      document.getElementById("paidBy").value = expense.paidBy;
-      names.forEach(name => {
-        document.getElementById(name).value = expense.shares[name] || 0;
-      });
-
-      // Change button temporarily to "Update"
-      const addBtn = document.querySelector("button[onclick='addExpense()']");
-      addBtn.textContent = "Update Expense";
-      addBtn.onclick = function () {
-        addExpense(true, index);
-        addBtn.textContent = "Add Expense";
-        addBtn.onclick = () => addExpense();
-      };
-    }
-
-    function updateTable() {
-      const table = document.getElementById("expenseTable");
-      table.innerHTML = `<tr><th>Description</th><th>Paid By</th><th>Details</th><th>Actions</th></tr>`;
-
-      expenses.forEach((e, index) => {
-        const details = Object.entries(e.shares)
-          .filter(([n, amt]) => amt > 0)
-          .map(([n, amt]) => `${n}: Rp ${amt.toLocaleString('id-ID')}`)
-          .join('<br>');
-        table.innerHTML += `
-          <tr>
-            <td>${e.desc}</td>
-            <td>${e.paidBy}</td>
-            <td>${details}</td>
-            <td>
-              <button onclick="editExpense(${index})">✏️ Edit</button>
-              <button onclick="deleteExpense(${index})">🗑 Delete</button>
-            </td>
-          </tr>`;
+    function renderTransactions() {
+      const container = document.getElementById("transactions");
+      container.innerHTML = "";
+      transactions.forEach((t, i) => {
+        const div = document.createElement("div");
+        div.className = "transaction";
+        const who = Object.entries(t.shares).map(([name, amt]) => `${name}: Rp${amt.toLocaleString()}`).join(", ");
+        div.innerHTML = `<strong>${t.payer}</strong> paid <strong>Rp${t.amount.toLocaleString()}</strong> for <em>${t.description}</em><br>${who}<br>
+          <button onclick="editTransaction(${i})">Edit</button>
+          <button onclick="deleteTransaction(${i})">Delete</button>`;
+        container.appendChild(div);
       });
     }
 
-    function updateResult() {
-      const balances = {};
-      const ledger = {};
+    function deleteTransaction(i) {
+      if (confirm("Are you sure you want to delete this transaction?")) {
+        transactions.splice(i, 1);
+        renderTransactions();
+        renderSummary();
+      }
+    }
 
-      names.forEach(n => {
-        balances[n] = 0;
-        ledger[n] = {};
-        names.forEach(n2 => {
-          if (n !== n2) ledger[n][n2] = 0;
-        });
+    function editTransaction(i) {
+      const t = transactions[i];
+      document.getElementById("payer").value = t.payer;
+      document.getElementById("description").value = t.description;
+      document.getElementById("amount").value = t.amount;
+
+      document.querySelectorAll(".member").forEach(cb => {
+        cb.checked = t.shares.hasOwnProperty(cb.value);
       });
 
-      expenses.forEach(({ paidBy, shares }) => {
-        names.forEach(name => {
-          const share = shares[name];
-          if (name !== paidBy && share > 0) {
-            balances[name] -= share;
-            balances[paidBy] += share;
-            ledger[name][paidBy] += share;
-          }
-        });
-      });
+      document.getElementById("splitEqual").checked = false;
+      document.getElementById("unequalInputs").style.display = "block";
+      renderUnequalInputs();
+      for (let name in t.shares) {
+        const el = document.getElementById(`amount-${name}`);
+        if (el) el.value = t.shares[name];
+      }
 
-      let output = "";
-      names.forEach(p => {
-        for (let o of names) {
-          if (p !== o && ledger[p][o] > 0) {
-            output += `${p} owes ${o}: Rp ${ledger[p][o].toLocaleString('id-ID')}\n`;
+      deleteTransaction(i);
+    }
+
+    function renderSummary() {
+      let balance = {};
+      members.forEach(m => balance[m] = 0);
+
+      transactions.forEach(({ payer, shares }) => {
+        for (let person in shares) {
+          if (person !== payer) {
+            balance[person] -= shares[person];
+            balance[payer] += shares[person];
           }
         }
       });
 
-      document.getElementById("result").textContent = output || "🎉 All settled!";
+      const summary = document.getElementById("summary");
+      summary.innerHTML = "";
+      members.forEach(from => {
+        members.forEach(to => {
+          if (from !== to) {
+            const diff = balance[from] - balance[to];
+            if (diff < 0 && Math.abs(diff) > 0) {
+              summary.innerHTML += `<div><strong>${from}</strong> owes <strong>${to}</strong>: Rp${(Math.abs(diff / 2)).toLocaleString()}</div>`;
+            }
+          }
+        });
+      });
     }
 
     function clearInputs() {
-      document.getElementById("desc").value = "";
-      names.forEach(name => document.getElementById(name).value = "0");
+      document.getElementById("description").value = "";
+      document.getElementById("amount").value = "";
+      document.querySelectorAll(".member").forEach(cb => cb.checked = true);
+      document.getElementById("splitEqual").checked = true;
+      document.getElementById("unequalInputs").style.display = "none";
     }
   </script>
 </body>
