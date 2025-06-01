@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Split Bill with Friends</title>
+  <title>Split Bill with Firebase</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     input, select { margin: 5px; }
@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <h2>Split Bill - Indonesia</h2>
+  <h2>Split Bill - Indonesia (Firebase)</h2>
 
   <label>Payer:</label>
   <select id="payer">
@@ -39,7 +39,7 @@
     <div id="individualInputs"></div>
   </div>
 
-  <button onclick="addTransaction()">Add</button>
+  <button onclick="addOrUpdateTransaction()">Add</button>
 
   <h3>Transactions</h3>
   <div id="transactions"></div>
@@ -47,9 +47,29 @@
   <h3>Summary</h3>
   <div id="summary"></div>
 
-  <script>
+  <!-- Firebase SDKs -->
+  <script type="module">
+    // Import Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDLfwj5MNEKRIJohjfwZ36KzgpOLZDuAQ0",
+      authDomain: "split-bill-a29b3.firebaseapp.com",
+      projectId: "split-bill-a29b3",
+      storageBucket: "split-bill-a29b3.firebasestorage.app",
+      messagingSenderId: "638435127785",
+      appId: "1:638435127785:web:bf68c994cdb57b8a8ddb78",
+      measurementId: "G-6PHG5T5F6N"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
     const members = ["Tariska", "Delano", "Lika", "Husin"];
-    const transactions = [];
+
+    let editingId = null;
 
     document.getElementById("splitEqual").addEventListener("change", function () {
       const show = !this.checked;
@@ -66,28 +86,28 @@
         input.type = "number";
         input.placeholder = `${name}'s share`;
         input.id = `amount-${name}`;
-        container.appendChild(document.createTextNode(name));
+        container.appendChild(document.createTextNode(name + ": "));
         container.appendChild(input);
         container.appendChild(document.createElement("br"));
       });
     }
 
-    function addTransaction(editIndex = null) {
+    async function addOrUpdateTransaction() {
       const payer = document.getElementById("payer").value;
-      const description = document.getElementById("description").value;
+      const description = document.getElementById("description").value.trim();
       const amount = parseFloat(document.getElementById("amount").value);
       const splitEqually = document.getElementById("splitEqual").checked;
 
       const selected = [...document.querySelectorAll(".member:checked")].map(cb => cb.value);
 
-      if (selected.length === 0 || isNaN(amount) || amount <= 0) {
+      if (selected.length === 0 || isNaN(amount) || amount <= 0 || description === "") {
         alert("Please fill in valid data.");
         return;
       }
 
       let shares = {};
       if (splitEqually) {
-        const share = Math.round((amount / selected.length));
+        const share = Math.round(amount / selected.length);
         selected.forEach(name => shares[name] = share);
       } else {
         let totalInput = 0;
@@ -104,85 +124,16 @@
 
       const data = { payer, description, amount, shares };
 
-      if (editIndex !== null) {
-        transactions[editIndex] = data;
+      if (editingId) {
+        const docRef = doc(db, "transactions", editingId);
+        await updateDoc(docRef, data);
+        editingId = null;
+        document.querySelector("button").textContent = "Add";
       } else {
-        transactions.push(data);
+        await addDoc(collection(db, "transactions"), data);
       }
 
-      renderTransactions();
-      renderSummary();
       clearInputs();
-    }
-
-    function renderTransactions() {
-      const container = document.getElementById("transactions");
-      container.innerHTML = "";
-      transactions.forEach((t, i) => {
-        const div = document.createElement("div");
-        div.className = "transaction";
-        const who = Object.entries(t.shares).map(([name, amt]) => `${name}: Rp${amt.toLocaleString()}`).join(", ");
-        div.innerHTML = `<strong>${t.payer}</strong> paid <strong>Rp${t.amount.toLocaleString()}</strong> for <em>${t.description}</em><br>${who}<br>
-          <button onclick="editTransaction(${i})">Edit</button>
-          <button onclick="deleteTransaction(${i})">Delete</button>`;
-        container.appendChild(div);
-      });
-    }
-
-    function deleteTransaction(i) {
-      if (confirm("Are you sure you want to delete this transaction?")) {
-        transactions.splice(i, 1);
-        renderTransactions();
-        renderSummary();
-      }
-    }
-
-    function editTransaction(i) {
-      const t = transactions[i];
-      document.getElementById("payer").value = t.payer;
-      document.getElementById("description").value = t.description;
-      document.getElementById("amount").value = t.amount;
-
-      document.querySelectorAll(".member").forEach(cb => {
-        cb.checked = t.shares.hasOwnProperty(cb.value);
-      });
-
-      document.getElementById("splitEqual").checked = false;
-      document.getElementById("unequalInputs").style.display = "block";
-      renderUnequalInputs();
-      for (let name in t.shares) {
-        const el = document.getElementById(`amount-${name}`);
-        if (el) el.value = t.shares[name];
-      }
-
-      deleteTransaction(i);
-    }
-
-    function renderSummary() {
-      let balance = {};
-      members.forEach(m => balance[m] = 0);
-
-      transactions.forEach(({ payer, shares }) => {
-        for (let person in shares) {
-          if (person !== payer) {
-            balance[person] -= shares[person];
-            balance[payer] += shares[person];
-          }
-        }
-      });
-
-      const summary = document.getElementById("summary");
-      summary.innerHTML = "";
-      members.forEach(from => {
-        members.forEach(to => {
-          if (from !== to) {
-            const diff = balance[from] - balance[to];
-            if (diff < 0 && Math.abs(diff) > 0) {
-              summary.innerHTML += `<div><strong>${from}</strong> owes <strong>${to}</strong>: Rp${(Math.abs(diff / 2)).toLocaleString()}</div>`;
-            }
-          }
-        });
-      });
     }
 
     function clearInputs() {
@@ -192,6 +143,174 @@
       document.getElementById("splitEqual").checked = true;
       document.getElementById("unequalInputs").style.display = "none";
     }
+
+    // Render transactions and summary live from Firestore
+    const transactionsDiv = document.getElementById("transactions");
+    const summaryDiv = document.getElementById("summary");
+
+    onSnapshot(collection(db, "transactions"), (snapshot) => {
+      const transactions = [];
+      snapshot.forEach(doc => {
+        transactions.push({ id: doc.id, ...doc.data() });
+      });
+      renderTransactions(transactions);
+      renderSummary(transactions);
+    });
+
+    function renderTransactions(transactions) {
+      transactionsDiv.innerHTML = "";
+      transactions.forEach((t) => {
+        const div = document.createElement("div");
+        div.className = "transaction";
+        const who = Object.entries(t.shares).map(([name, amt]) => `${name}: Rp${amt.toLocaleString()}`).join(", ");
+        div.innerHTML = `<strong>${t.payer}</strong> paid <strong>Rp${t.amount.toLocaleString()}</strong> for <em>${t.description}</em><br>${who}<br>
+          <button onclick="editTransaction('${t.id}')">Edit</button>
+          <button onclick="deleteTransaction('${t.id}')">Delete</button>`;
+        transactionsDiv.appendChild(div);
+      });
+    }
+
+    async function deleteTransaction(id) {
+      if (confirm("Are you sure you want to delete this transaction?")) {
+        await deleteDoc(doc(db, "transactions", id));
+      }
+    }
+
+    async function editTransaction(id) {
+      const docRef = doc(db, "transactions", id);
+      const docSnap = await docRef.get();
+      const docData = await (await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/transactions/${id}`)).json();
+
+      // Alternative to get doc from Firestore SDK:
+      // const docSnap = await getDoc(docRef);
+      // const docData = docSnap.data();
+
+      // Instead, we can keep transactions in local memory or re-fetch from Firestore:
+      const transaction = docData.fields
+        ? Object.fromEntries(Object.entries(docData.fields).map(([k,v]) => [k, v.stringValue ?? v.integerValue ?? v.doubleValue ?? v.arrayValue ?? v.mapValue ?? v.booleanValue]))
+        : null;
+
+      // But better: use snapshot data or keep transactions locally.
+      // For simplicity, fetch all docs from snapshot and find one by id.
+
+      // Instead, let's keep a simpler approach:
+
+      // Use onSnapshot cache or get from Firestore SDK - but Firestore SDK doesn't provide getDoc with modular imports easily here without more imports.
+
+      // So let's do a simpler way:
+
+      // We will store transactions in a global variable to find by id:
+      const tr = window._lastTransactions.find(t => t.id === id);
+      if(!tr) return alert("Transaction not found");
+
+      // Set fields
+      document.getElementById("payer").value = tr.payer;
+      document.getElementById("description").value = tr.description;
+      document.getElementById("amount").value = tr.amount;
+
+      document.querySelectorAll(".member").forEach(cb => {
+        cb.checked = tr.shares.hasOwnProperty(cb.value);
+      });
+
+      const splitEqualCheckbox = document.getElementById("splitEqual");
+      // Check if shares are equal
+      const shareValues = Object.values(tr.shares);
+      const allEqual = shareValues.every(v => v === shareValues[0]);
+      splitEqualCheckbox.checked = allEqual;
+      document.getElementById("unequalInputs").style.display = allEqual ? "none" : "block";
+
+      if (!allEqual) {
+        renderUnequalInputs();
+        for (let name in tr.shares) {
+          const el = document.getElementById(`amount-${name}`);
+          if (el) el.value = tr.shares[name];
+        }
+      }
+
+      editingId = id;
+      document.querySelector("button").textContent = "Update";
+    }
+
+    // Store last snapshot data to help editTransaction function
+    window._lastTransactions = [];
+    onSnapshot(collection(db, "transactions"), (snapshot) => {
+      window._lastTransactions = [];
+      snapshot.forEach(doc => {
+        window._lastTransactions.push({ id: doc.id, ...doc.data() });
+      });
+    });
+
+function renderSummary() {
+  summaryDiv.innerHTML = "<h3>Summary</h3>";
+
+  // Calculate total paid per person and total owed per person
+  const totalPaid = {};
+  const totalOwed = {};
+  const people = ["Tariska", "Delano", "Lika", "Husin"];
+
+  // Initialize totals to zero
+  people.forEach(p => {
+    totalPaid[p] = 0;
+    totalOwed[p] = 0;
+  });
+
+  // Sum all transactions
+  transactions.forEach(tx => {
+    totalPaid[tx.payer] += tx.amount;
+    // Add shares owed by each person
+    people.forEach(person => {
+      if (tx.shares[person]) {
+        totalOwed[person] += tx.shares[person];
+      }
+    });
+  });
+
+  // Calculate net balance per person (positive means others owe them, negative means they owe others)
+  const netBalance = {};
+  people.forEach(p => {
+    netBalance[p] = totalPaid[p] - totalOwed[p];
+  });
+
+  // Now figure out who owes whom
+  // Create arrays for debtors and creditors
+  const debtors = [];
+  const creditors = [];
+
+  people.forEach(p => {
+    if (netBalance[p] < 0) {
+      debtors.push({ person: p, amount: -netBalance[p] }); // amount they owe
+    } else if (netBalance[p] > 0) {
+      creditors.push({ person: p, amount: netBalance[p] }); // amount others owe them
+    }
+  });
+
+  // Match debtors to creditors to display who owes whom
+  debtors.forEach(debtor => {
+    let amountLeft = debtor.amount;
+
+    for (let i = 0; i < creditors.length; i++) {
+      const creditor = creditors[i];
+      if (creditor.amount === 0) continue;
+
+      // Calculate how much debtor owes this creditor
+      const owed = Math.min(amountLeft, creditor.amount);
+
+      summaryDiv.innerHTML += `<div><strong>${debtor.person}</strong> owes <strong>${creditor.person}</strong>: Rp${owed.toLocaleString()}</div>`;
+
+      // Decrease balances
+      amountLeft -= owed;
+      creditor.amount -= owed;
+
+      if (amountLeft <= 0) break;
+    }
+  });
+
+  // If no debts, show a friendly message
+  if (debtors.length === 0) {
+    summaryDiv.innerHTML += "<div>All settled up!</div>";
+  }
+}
+
   </script>
 </body>
 </html>
