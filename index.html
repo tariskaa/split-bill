@@ -116,7 +116,10 @@
       let sumShares = 0;
       for (const p of people) {
         const val = Number(shareInputs[p].value);
-        if (isNaN(val) || val < 0) return false;
+        if (isNaN(val) || val < 0) {
+          sharesErrorDiv.textContent = "Shares must be numbers ≥ 0.";
+          return false;
+        }
         sumShares += val;
       }
       if (sumShares !== amount) {
@@ -203,7 +206,8 @@
       });
     }
 
-    function editTx(i) {
+    // Expose functions to global for inline onclick handlers
+    window.editTx = function(i) {
       const tx = transactions[i];
       descInput.value = tx.desc;
       payerInput.value = tx.payer;
@@ -211,7 +215,7 @@
       editingIndex = i;
 
       const allEqualShares = people.every(p => {
-        return tx.shares[p] === tx.amount / people.length;
+        return tx.shares[p] === Math.round(tx.amount / people.length);
       });
 
       if (allEqualShares) {
@@ -224,53 +228,62 @@
           shareInputs[p].value = tx.shares[p] || 0;
         });
       }
+      sharesErrorDiv.textContent = "";
+      addForm.querySelector("button").textContent = "Update Transaction";
+    };
 
-      addForm.querySelector("button").textContent = "Save Changes";
-    }
-
-    function deleteTx(i) {
-      if (confirm("Are you sure you want to delete this transaction?")) {
+    window.deleteTx = function(i) {
+      if (confirm("Delete this transaction?")) {
         transactions.splice(i, 1);
         saveTransactions();
         renderTransactions();
         renderSummary();
         if (editingIndex === i) clearForm();
       }
-    }
+    };
 
     addForm.addEventListener("submit", e => {
       e.preventDefault();
+
       const desc = descInput.value.trim();
       const payer = payerInput.value;
       const amount = Number(amountInput.value);
 
-      if (!validateShares(amount)) return;
+      if (!desc) {
+        alert("Description is required");
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        alert("Amount must be a positive number");
+        return;
+      }
+
+      if (!validateShares(amount)) {
+        return;
+      }
 
       let shares = {};
       if (equalSplitInput.checked) {
-        const splitAmt = Math.round(amount / people.length);
-        people.forEach(p => {
-          shares[p] = splitAmt;
-        });
-        // Adjust for rounding difference:
-        const totalShares = Object.values(shares).reduce((a,b) => a+b, 0);
-        if (totalShares !== amount) {
-          // Adjust last person's share to fix rounding
-          const diff = amount - totalShares;
-          shares[people[people.length-1]] += diff;
+        // Equal split
+        const shareVal = Math.round(amount / people.length);
+        let remainder = amount - shareVal * people.length;
+        people.forEach(p => (shares[p] = shareVal));
+        // Distribute remainder
+        for (let i = 0; i < remainder; i++) {
+          shares[people[i]] += 1;
         }
       } else {
         people.forEach(p => {
-          shares[p] = Number(shareInputs[p].value);
+          shares[p] = Number(shareInputs[p].value) || 0;
         });
       }
 
-      const newTx = { desc, payer, amount, shares };
-
-      if (editingIndex === -1) {
-        transactions.push(newTx);
+      if (editingIndex >= 0) {
+        // Update existing
+        transactions[editingIndex] = { desc, payer, amount, shares };
       } else {
-        transactions[editingIndex] = newTx;
+        // Add new
+        transactions.push({ desc, payer, amount, shares });
       }
 
       saveTransactions();
