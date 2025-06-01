@@ -7,6 +7,7 @@
     input, select, button { margin: 5px; padding: 5px; }
     table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 5px; }
     th { background-color: #f0f0f0; }
+    td button { margin: 2px; }
   </style>
 </head>
 <body>
@@ -35,7 +36,7 @@
 
   <h3>🧾 Expenses</h3>
   <table id="expenseTable">
-    <tr><th>Description</th><th>Paid By</th><th>Details</th></tr>
+    <tr><th>Description</th><th>Paid By</th><th>Details</th><th>Actions</th></tr>
   </table>
 
   <h3>📊 Who Owes Whom</h3>
@@ -43,73 +44,116 @@
 
   <script>
     const names = ["Tariska", "Delano", "Lika", "Husin"];
-    const balances = {}; // Net balance
-    const ledger = {};   // Who owes whom
+    let expenses = [];
 
-    names.forEach(name => {
-      balances[name] = 0;
-      ledger[name] = {};
-      names.forEach(n2 => {
-        if (name !== n2) ledger[name][n2] = 0;
-      });
-    });
-
-    const expenses = [];
-
-    function addExpense() {
+    function getInputData() {
       const desc = document.getElementById("desc").value;
       const paidBy = document.getElementById("paidBy").value;
-
-      let total = 0;
       const shares = {};
+      let total = 0;
 
       names.forEach(name => {
-        const val = parseFloat(document.getElementById(name).value) || 0;
-        shares[name] = val;
-        total += val;
+        const amt = parseFloat(document.getElementById(name).value) || 0;
+        shares[name] = amt;
+        total += amt;
       });
+
+      return { desc, paidBy, shares, total };
+    }
+
+    function addExpense(isEdit = false, editIndex = null) {
+      const { desc, paidBy, shares, total } = getInputData();
 
       if (!desc || total === 0) {
         alert("Please enter a description and non-zero shared amounts.");
         return;
       }
 
-      expenses.push({ desc, paidBy, shares });
-
-      // Update balances and ledger
-      names.forEach(name => {
-        const share = shares[name];
-        if (name !== paidBy && share > 0) {
-          balances[name] -= share;
-          balances[paidBy] += share;
-          ledger[name][paidBy] += share;
-        }
-      });
+      if (isEdit) {
+        expenses[editIndex] = { desc, paidBy, shares };
+      } else {
+        expenses.push({ desc, paidBy, shares });
+      }
 
       updateTable();
       updateResult();
       clearInputs();
     }
 
+    function deleteExpense(index) {
+      expenses.splice(index, 1);
+      updateTable();
+      updateResult();
+    }
+
+    function editExpense(index) {
+      const expense = expenses[index];
+      document.getElementById("desc").value = expense.desc;
+      document.getElementById("paidBy").value = expense.paidBy;
+      names.forEach(name => {
+        document.getElementById(name).value = expense.shares[name] || 0;
+      });
+
+      // Change button temporarily to "Update"
+      const addBtn = document.querySelector("button[onclick='addExpense()']");
+      addBtn.textContent = "Update Expense";
+      addBtn.onclick = function () {
+        addExpense(true, index);
+        addBtn.textContent = "Add Expense";
+        addBtn.onclick = () => addExpense();
+      };
+    }
+
     function updateTable() {
       const table = document.getElementById("expenseTable");
-      table.innerHTML = `<tr><th>Description</th><th>Paid By</th><th>Details</th></tr>`;
-      expenses.forEach(e => {
+      table.innerHTML = `<tr><th>Description</th><th>Paid By</th><th>Details</th><th>Actions</th></tr>`;
+
+      expenses.forEach((e, index) => {
         const details = Object.entries(e.shares)
           .filter(([n, amt]) => amt > 0)
           .map(([n, amt]) => `${n}: Rp ${amt.toLocaleString('id-ID')}`)
           .join('<br>');
-        table.innerHTML += `<tr><td>${e.desc}</td><td>${e.paidBy}</td><td>${details}</td></tr>`;
+        table.innerHTML += `
+          <tr>
+            <td>${e.desc}</td>
+            <td>${e.paidBy}</td>
+            <td>${details}</td>
+            <td>
+              <button onclick="editExpense(${index})">✏️ Edit</button>
+              <button onclick="deleteExpense(${index})">🗑 Delete</button>
+            </td>
+          </tr>`;
       });
     }
 
     function updateResult() {
-      let output = "";
+      const balances = {};
+      const ledger = {};
 
-      names.forEach(person => {
-        for (let other of names) {
-          if (person !== other && ledger[person][other] > 0) {
-            output += `${person} owes ${other}: Rp ${ledger[person][other].toLocaleString('id-ID')}\n`;
+      names.forEach(n => {
+        balances[n] = 0;
+        ledger[n] = {};
+        names.forEach(n2 => {
+          if (n !== n2) ledger[n][n2] = 0;
+        });
+      });
+
+      expenses.forEach(({ paidBy, shares }) => {
+        names.forEach(name => {
+          const share = shares[name];
+          if (name !== paidBy && share > 0) {
+            balances[name] -= share;
+            balances[paidBy] += share;
+            ledger[name][paidBy] += share;
+          }
+        });
+      });
+
+      let output = "";
+      names.forEach(p => {
+        for (let o of names) {
+          if (p !== o && ledger[p][o] > 0) {
+            output += `${p} owes ${o}: Rp ${ledger[p][o].toLocaleString('id-ID')}\n`;
           }
         }
       });
